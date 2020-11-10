@@ -334,7 +334,9 @@ void look_at() {
 	vec3 right = normalize(cross(vec3(0.0,1.0,0.0), forward));
 	vec3 up = normalize(cross(forward, right));
 
-	cam_orientation = mat3(right, up, forward);
+	cam_orientation[0] = right;
+	cam_orientation[1] = up;
+	cam_orientation[2] = forward;
 }
 
 void reset_camera() {
