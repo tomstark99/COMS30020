@@ -28,6 +28,7 @@ mat3 cam_orientation(
 	vec3(0.0,0.0,1.0)
 );
 float focal = 500.0;
+bool orbiting = false;
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
@@ -329,7 +330,7 @@ unordered_map<string, Colour> parse_mtl(string filename) {
 
 
 void look_at() {
-	vec3 forward = normalize(cam - o);
+	vec3 forward = normalize(cam - vec3(0.0,0.0,0.0));
 	vec3 right = normalize(cross(vec3(0.0,1.0,0.0), forward));
 	vec3 up = normalize(cross(forward, right));
 
@@ -351,11 +352,9 @@ mat3 rotation_z(float t) {
 	return mat3(vec3( cos(t),-sin(t), 0.0),vec3( sin(t), cos(t), 0.0),vec3(    0.0,    0.0, 1.0));
 }
 
-void orbit() {
-	int steps = round((2*pi)/(pi/180));
-	cout << steps << endl;
-	for(int i = 0; i < steps; i++) {
-		cam_orientation = cam_orientation * rotation_y(-pi/180);
+void orbit(bool orb) {
+	if(orb) {
+		cam = cam * rotation_y(-pi/180);
 		look_at();
 	}
 }
@@ -378,7 +377,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_DOWN)  cam_orientation = cam_orientation * rotation_x( pi/180);
 		else if (event.key.keysym.sym == SDLK_z)     cam = cam * rotation_z(-pi/180);
 		else if (event.key.keysym.sym == SDLK_x)     cam = cam * rotation_z( pi/180);
-		else if (event.key.keysym.sym == SDLK_o) orbit();
+		else if (event.key.keysym.sym == SDLK_o) orbiting = (orbiting) ? false : true;
 		else if (event.key.keysym.sym == SDLK_l) look_at();
 		else if (event.key.keysym.sym == SDLK_r) reset_camera();
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) window.savePPM("output.ppm");
@@ -393,6 +392,7 @@ int main(int argc, char *argv[]) {
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window_grey.pollForInputEvents(event)) handleEvent(event, window_grey);
+		orbit(orbiting);
 		draw(window_grey);
 		draw_obj(t, window_grey);
 		// texture_triangle(texture, t, window_grey);
