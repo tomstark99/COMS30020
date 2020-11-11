@@ -230,23 +230,23 @@ void draw_obj(vector<ModelTriangle> triangles, DrawingWindow &window) {
 	for(int i = 0; i < triangles.size(); i++) {
 		ModelTriangle triangle = triangles[i];
 		CanvasTriangle t;
-		for(int i = 0; i < triangle.vertices.size(); i++) {
-			vec3 vertex = triangle.vertices[i];
+		for(int j = 0; j < triangle.vertices.size(); j++) {
+			vec3 vertex = triangle.vertices[j];
 			vec3 cam_to_vertex(vertex.x - cam.x, vertex.y - cam.y, vertex.z - cam.z);
 			vec3 adjusted_vertex = cam_to_vertex * cam_orientation;
 		
-			int u = -(focal * adjusted_vertex.x)/(adjusted_vertex.z-cam.z) + window.width/2;
-			int v = (focal * adjusted_vertex.y)/(adjusted_vertex.z-cam.z) + window.height/2;
+			int u = -(focal * (adjusted_vertex.x)/(adjusted_vertex.z)) + (window.width/2);
+			int v = (focal * (adjusted_vertex.y)/(adjusted_vertex.z)) + (window.height/2);
 			;
-			t.vertices[i] = CanvasPoint(u,v, adjusted_vertex.z);
-			t.vertices[i].texturePoint = triangle.texturePoints[i];
+			t.vertices[j] = CanvasPoint(u,v, adjusted_vertex.z);
+			t.vertices[j].texturePoint = triangle.texturePoints[j];
 		}
 		// draw_triangle(t, Colour(255,255,255), window);
 		if (triangle.colour.name != "") {
 			TextureMap texture(triangle.colour.name);
-			for(int i = 0; i < t.vertices.size(); i++) {
-				t.vertices[i].texturePoint.x *= texture.width;
-				t.vertices[i].texturePoint.y *= texture.height;
+			for(int j = 0; j < t.vertices.size(); j++) {
+				t.vertices[j].texturePoint.x *= texture.width;
+				t.vertices[j].texturePoint.y *= texture.height;
 			}
 			texture_triangle(texture, t, window, depths);
 		} else {
@@ -276,18 +276,18 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 		} else if(tokens[0] == "vt") {
 			texture_points.push_back(TexturePoint(stof(tokens[1]), stof(tokens[2])));
 		} else if(tokens[0] == "f") {
-			vector<string> l1_tokens = split(tokens[1], '/');
-			vector<string> l2_tokens = split(tokens[2], '/');
-			vector<string> l3_tokens = split(tokens[3], '/');
+			vector<string> l1 = split(tokens[1], '/');
+			vector<string> l2 = split(tokens[2], '/');
+			vector<string> l3 = split(tokens[3], '/');
 			ModelTriangle triangle(
-				vertices[stoi(l1_tokens[0])-1], 
-				vertices[stoi(l2_tokens[0])-1], 
-				vertices[stoi(l3_tokens[0])-1], 
+				vertices[stoi(l1[0])-1], 
+				vertices[stoi(l2[0])-1], 
+				vertices[stoi(l3[0])-1], 
 				colours[colour]);
-			if(l1_tokens[1] != "") {
-				triangle.texturePoints[0] = texture_points[stoi(l1_tokens[1])-1];
-				triangle.texturePoints[1] = texture_points[stoi(l2_tokens[1])-1];
-				triangle.texturePoints[2] = texture_points[stoi(l3_tokens[1])-1];
+			if(l1[1] != "") {
+				triangle.texturePoints[0] = texture_points[stoi(l1[1])-1];
+				triangle.texturePoints[1] = texture_points[stoi(l2[1])-1];
+				triangle.texturePoints[2] = texture_points[stoi(l3[1])-1];
 			} 
 			triangles.push_back(triangle);
 		}  else if(tokens[0] == "usemtl") {
@@ -326,8 +326,6 @@ unordered_map<string, Colour> parse_mtl(string filename) {
 	File.close();
 	return colours;
 }
-
-
 
 void look_at() {
 	vec3 forward = normalize(cam - vec3(0.0,0.0,0.0));
