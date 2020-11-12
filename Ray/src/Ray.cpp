@@ -22,27 +22,25 @@ using namespace glm;
 
 #define pi 3.14159265359
 
-vec3 cam(0.0, 0.0, 4.0);
-vec3   o(0.0, 0.0, 0.0);
-mat3 cam_orientation(
-	vec3(1.0,0.0,0.0),
-	vec3(0.0,1.0,0.0),
-	vec3(0.0,0.0,1.0)
-);
+vec3     o(0.0, 0.0, 0.0); // origin
+vec3   cam(0.0, 0.0, 4.0);
+vec3 light(0.0, 1.0, 0.0); // 1.0 is proportional to scale used when loading obj
+mat3 cam_orientation(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
+
 float focal = 500.0;
 bool orbiting = false;
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
-	for (size_t y = 0; y < window.height; y++) {
-		for (size_t x = 0; x < window.width; x++) {
-			float red = rand() % 256;
-			float green = 0.0;
-			float blue = 0.0;
-			uint32_t colour = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue);
-			// window.setPixelColour(x, y, colour);
-		}
-	}
+	// for (size_t y = 0; y < window.height; y++) {
+	// 	for (size_t x = 0; x < window.width; x++) {
+	// 		float red = rand() % 256;
+	// 		float green = 0.0;
+	// 		float blue = 0.0;
+	// 		uint32_t colour = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue);
+	// 		// window.setPixelColour(x, y, colour);
+	// 	}
+	// }
 }
 
 void update(DrawingWindow &window) {
@@ -164,9 +162,7 @@ void texture_half_triangle(CanvasTriangle triangle, TextureMap texture, DrawingW
 			if(x >= 0 && x < window.width && y >= 0 && y < window.height) {
 				if(-1/points[j].depth > depths[x][y]) {
 					depths[x][y] = -1/points[j].depth;
-					// uint32_t c = (255 << 24) + (int(colour.red) << 16) + (int(colour.green) << 8) + int(colour.blue);
 					window.setPixelColour(x, y, texture.pixels[round(points_texture[j].y)*texture.width + round(points_texture[j].x)]);
-					// window.setPixelColour(x,y,c);
 				}
 			}
 		}
@@ -245,6 +241,19 @@ void draw_wireframe(vector<ModelTriangle> triangles, DrawingWindow &window) {
 		}
 		draw_triangle(t, Colour(255,255,255), window);
 	}
+
+	vec3 cam_to_vertex = vec3(light.x - cam.x, light.y - cam.y, light.z - cam.z);
+    vec3 adjusted_vector = cam_to_vertex * cam_orientation;
+
+    int u = -(focal * (adjusted_vector.x)/(adjusted_vector.z)) + (window.width / 2);
+    int v = (focal * (adjusted_vector.y)/(adjusted_vector.z)) + (window.height / 2);
+
+    // prints red pixels to show light location
+    window.setPixelColour(u,   v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+    window.setPixelColour(u+1, v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+    window.setPixelColour(u, v+1, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+    window.setPixelColour(u-1, v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+    window.setPixelColour(u, v-1, (255 << 24) + (255 << 16) + (0 << 8) + 0);
 }
 
 void draw_rasterise(vector<ModelTriangle> triangles, DrawingWindow &window) {
@@ -273,8 +282,75 @@ void draw_rasterise(vector<ModelTriangle> triangles, DrawingWindow &window) {
 			}
 			texture_triangle(texture, t, window, depths);
 		} else {
-			// draw_triangle(t, Colour(255,255,255), window);
 			fill_triangle(t, triangle.colour, window, depths);
+		}
+	}
+}
+
+bool is_shadow(RayTriangleIntersection intersect, vector<ModelTriangle> triangles) {
+
+	vec3 shadow_ray = light - intersect.intersectionPoint;
+
+	for(int i = 0; i < triangles.size(); i++) {
+		ModelTriangle tri = triangles[i];
+
+		vec3 e0 = tri.vertices[1] - tri.vertices[0];
+		vec3 e1 = tri.vertices[2] - tri.vertices[0];
+		vec3 sp_vector = intersect.intersectionPoint - tri.vertices[0];
+		mat3 de_matrix(-normalize(shadow_ray), e0, e1);
+		vec3 possible_s = inverse(de_matrix) * sp_vector;
+		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
+
+		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
+			if(t < glm::length(shadow_ray) && t > 0.01 && i != intersect.triangleIndex) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTriangle> triangles) {
+	RayTriangleIntersection rti;
+	rti.distanceFromCamera = numeric_limits<float>::infinity();
+	vec3 ray = cam - direction;
+	ray = cam_orientation * ray;
+
+	for(int i = 0; i < triangles.size(); i++) {
+		ModelTriangle tri = triangles[i];
+
+		vec3 e0 = tri.vertices[1] - tri.vertices[0];
+		vec3 e1 = tri.vertices[2] - tri.vertices[0];
+		vec3 sp_vector = cam - tri.vertices[0];
+		mat3 de_matrix(-ray, e0, e1);
+		vec3 possible_s = inverse(de_matrix) * sp_vector;
+		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
+
+		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
+			if(rti.distanceFromCamera > t && t > 0) {
+				rti.distanceFromCamera = t;
+				rti.intersectedTriangle = tri;
+				rti.triangleIndex = i;
+
+				vec3 intersect = tri.vertices[0]+u*e0+v*e1;
+				rti.intersectionPoint = intersect;
+			}
+		}
+	}
+	return rti;
+}
+
+void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
+	for(int x = 0; x < window.width; x++) {
+		for(int y = 0; y < window.height; y++) {
+			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
+			if(!isinf(rt_int.distanceFromCamera)){
+				Colour colour = rt_int.intersectedTriangle.colour;
+				uint32_t c = (255 << 24) + (int(colour.red) << 16) + (int(colour.green) << 8) + int(colour.blue);
+				uint32_t s = (255 << 24) + (int(colour.red/3) << 16) + (int(colour.green/3) << 8) + int(colour.blue/3);
+
+				if(is_shadow(rt_int, triangles)) window.setPixelColour(x,y,s); else window.setPixelColour(x,y,c);
+			}
 		}
 	}
 }
@@ -315,9 +391,6 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 			} 
 			triangles.push_back(triangle);
 		}  else if(tokens[0] == "usemtl") {
-			if(tokens[1] != "") {
-				texture_name = tokens[1];
-			}
 			colour = tokens[1];
 		}
 	}
@@ -351,50 +424,8 @@ unordered_map<string, Colour> parse_mtl(string filename) {
 	return colours;
 }
 
-RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTriangle> triangles) {
-	RayTriangleIntersection rti;
-	rti.distanceFromCamera = numeric_limits<float>::infinity();
-	vec3 ray = cam - direction;
-	ray = cam_orientation * ray;
-
-	for(int i = 0; i < triangles.size(); i++) {
-		ModelTriangle tri = triangles[i];
-
-		vec3 e0 = tri.vertices[1] - tri.vertices[0];
-		vec3 e1 = tri.vertices[2] - tri.vertices[0];
-		vec3 sp_vector = cam - tri.vertices[0];
-		mat3 de_matrix(-ray, e0, e1);
-		vec3 possible_s = inverse(de_matrix) * sp_vector;
-		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
-		// rti = RayTriangleIntersection(tri.vertices[0]+u*e0+v*e1, t, tri, i);
-
-		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(rti.distanceFromCamera > t && t > 0) {
-				rti.distanceFromCamera = t;
-				rti.intersectedTriangle = tri;
-				rti.triangleIndex = i;
-
-				vec3 intersect = tri.vertices[0]+u*e0+v*e1;
-				rti.intersectionPoint = intersect;
-			}
-		}
-	}
-	return rti;
-}
-
-void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
-	for(int x = 0; x < window.width; x++) {
-		for(int y = 0; y < window.height; y++) {
-			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
-			Colour colour = rt_int.intersectedTriangle.colour;
-			uint32_t c = (255 << 24) + (int(colour.red) << 16) + (int(colour.green) << 8) + int(colour.blue);
-			window.setPixelColour(x,y,c);
-		}
-	}
-}
-
 void look_at() {
-	vec3 forward = normalize(cam - vec3(0.0,0.0,0.0));
+	vec3 forward = normalize(cam - o);
 	vec3 right = normalize(cross(vec3(0.0,1.0,0.0), forward));
 	vec3 up = normalize(cross(forward, right));
 
@@ -454,12 +485,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) window.savePPM("output.ppm");
 }
 
-
 int main(int argc, char *argv[]) {
 
 	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
-	RayTriangleIntersection rt_int = get_closest_intersection(vec3(0.0,0.0,focal), t);
-	cout << rt_int << endl;
 
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
@@ -467,13 +495,9 @@ int main(int argc, char *argv[]) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window_grey.pollForInputEvents(event)) handleEvent(event, window_grey);
 		orbit(orbiting);
+
 		draw(window_grey);
-		// draw_rasterise(t, window_grey);
 		drawing(t, window_grey);
-		// texture_triangle(texture, t, window_grey);
-		// fill_triangle(t, Colour(0,0,255),window_grey);
-		// draw_triangle(t, Colour(255,255,255), window_grey);
-		// random_triangle(window_grey);
 
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window_grey.renderFrame();
