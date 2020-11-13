@@ -268,23 +268,36 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
 		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
 		else if (event.key.keysym.sym == SDLK_u || event.key.keysym.sym == SDLK_f) random_triangle(window, event.key.keysym.sym);
+		else if (event.key.keysym.sym == SDLK_t) {
+			TextureMap texture("src/texture.ppm");
+
+			CanvasPoint p_1(160,10);
+			CanvasPoint p_2(300,230);
+			CanvasPoint p_3(10,150);
+			p_1.texturePoint = TexturePoint(195,5);
+			p_2.texturePoint = TexturePoint(395,380);
+			p_3.texturePoint = TexturePoint(65,330);
+
+			CanvasTriangle t(p_1,p_2,p_3);
+			texture_triangle(texture, t, window_grey);
+		}
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) window.savePPM("output.ppm");
 }
 
 int main(int argc, char *argv[]) {
 
-	TextureMap texture("src/texture.ppm");
+	// TextureMap texture("src/texture.ppm");
     // std::cout << texture.width << std::endl;
     // std::cout << texture.height << std::endl;
 
-	CanvasPoint p_1(160,10);
-	CanvasPoint p_2(300,230);
-	CanvasPoint p_3(10,150);
-	p_1.texturePoint = TexturePoint(195,5);
-	p_2.texturePoint = TexturePoint(395,380);
-	p_3.texturePoint = TexturePoint(65,330);
+	// CanvasPoint p_1(160,10);
+	// CanvasPoint p_2(300,230);
+	// CanvasPoint p_3(10,150);
+	// p_1.texturePoint = TexturePoint(195,5);
+	// p_2.texturePoint = TexturePoint(395,380);
+	// p_3.texturePoint = TexturePoint(65,330);
 
-	CanvasTriangle t(p_1,p_2,p_3);
+	// CanvasTriangle t(p_1,p_2,p_3);
 
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
@@ -292,7 +305,7 @@ int main(int argc, char *argv[]) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window_grey.pollForInputEvents(event)) handleEvent(event, window_grey);
 		update(window_grey);
-		texture_triangle(texture, t, window_grey);
+		// texture_triangle(texture, t, window_grey);
 		// fill_triangle(t, Colour(0,0,255),window_grey);
 		// draw_triangle(t, Colour(255,255,255), window_grey);
 		// random_triangle(window_grey);
