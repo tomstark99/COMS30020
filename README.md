@@ -6,7 +6,7 @@ Welcome to the Computer Graphics Unit for 2020
 
 ## Week 1: RedNoise
 
-Template project to test `SDL` and `opencv`
+Template project to test `SDL`
 
 ### usage
 
