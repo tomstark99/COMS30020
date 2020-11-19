@@ -115,6 +115,7 @@ _these are not recommended when in the raytracing rendering method, this is best
 ## Week 7: Light
 
 Project to demonstrate various lighting effects on a raytraced projection of 3D points.
+
 - proximity lighting, lights up surfaces with a scale depending on the distance to the light
 - angle of incidence lighting, lights up surfaces depending on the angle at which the light hits it (i.e. higher angle means more light spread)
 - specular lighting, given a scale factor, makes surfaces appear more shiny or more matte
