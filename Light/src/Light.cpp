@@ -23,12 +23,16 @@ using namespace glm;
 #define pi 3.14159265359
 
 vec3     o(0.0, 0.0, 0.0); // origin
-vec3   cam(0.0, 0.0, 4.0);
-vec3 light(0.0, 1.0, 0.0); // 1.0 is proportional to scale used when loading obj
+vec3   cam(0.0, 0.0, 4.0); // cornell cam
+// vec3   cam(0.0, 0.7, 2.0); // sphere cam
+vec3 light(0.0, 1.0, 0.0); // cornell light - 1.0 is proportional to scale used when loading obj
+// vec3 light(-0.2, 1.4, 2.2); // sphere light - values are proportional to scale used when loading obj
 mat3 cam_orientation(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
 
 float focal = 500.0;
 bool orbiting = false;
+bool proximity = true, angle_of = true, shadows = true, specular = true; // cornell values
+// bool proximity = false, angle_of = true, shadows = false, specular = true; // sphere values
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
@@ -310,12 +314,19 @@ bool is_shadow(RayTriangleIntersection intersect, vector<ModelTriangle> triangle
 	return false;
 }
 
-float get_scale(RayTriangleIntersection rt_int) {
+float get_scale(RayTriangleIntersection rt_int, int scale) {
 
+	vec3 normal = normalize(rt_int.intersectedTriangle.normal);
 	vec3 light_ray = rt_int.intersectionPoint - light;
-	float scale_p = 1/pow(length(light_ray),2);
-	float scale_a = dot(normalize(rt_int.intersectedTriangle.normal), normalize(light_ray));
-	if(scale_a > 0) scale_p += scale_a;
+	vec3 view_ray = normalize(rt_int.intersectionPoint - cam);
+	vec3 reflection_ray = normalize(light_ray - (normal * 2.0f * dot(normalize(light_ray), normal)));
+
+	float scale_p = (proximity) ? 1/(pow(length(light_ray),2)) : 0;
+	float scale_a = dot(normal, normalize(light_ray));
+	float scale_s = pow(dot(reflection_ray, view_ray),scale);
+
+	if(scale_a > 0 && angle_of) scale_p += scale_a;
+	if(scale_s > 0 && specular) scale_p += scale_s;
 	return (scale_p < 1) ? scale_p : 1;
 }
 
@@ -323,7 +334,7 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = numeric_limits<float>::infinity();
 	vec3 ray = cam - direction;
-	ray = cam_orientation * ray;
+	ray = normalize(cam_orientation * ray);
 
 	for(int i = 0; i < triangles.size(); i++) {
 		ModelTriangle tri = triangles[i];
@@ -339,7 +350,7 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 			if(rti.distanceFromCamera > t && t > 0) {
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = tri;
-				rti.intersectedTriangle.normal = cross(e0,e1);
+				rti.intersectedTriangle.normal = cross(e1,e0);
 				rti.triangleIndex = i;
 
 				vec3 intersect = tri.vertices[0]+u*e0+v*e1;
@@ -355,14 +366,17 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 		for(int y = 0; y < window.height; y++) {
 			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
 			
-			// cout << "prox " << scale_p << " : " << "ang " << scale_a << endl;
-			float scale = get_scale(rt_int);
+			float scale = get_scale(rt_int, 64);
+			scale = (scale > 0.3) ? scale : 0.3;
+			float scale_s = scale/3;
+			scale_s = (scale_s > 0.3) ? scale_s : 0.3;
+			// if(x%100 == 0 && y%100 == 0) cout << scale << endl << scale_s << endl << endl;
 			if(!isinf(rt_int.distanceFromCamera)){
 				Colour colour = rt_int.intersectedTriangle.colour;
 				uint32_t c = (255 << 24) + (int(colour.red*scale) << 16) + (int(colour.green*scale) << 8) + int(colour.blue*scale);
-				uint32_t s = (255 << 24) + (int((colour.red*scale)/3) << 16) + (int((colour.green*scale)/3) << 8) + int((colour.blue*scale)/3);
+				uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
 
-				if(is_shadow(rt_int, triangles)) window.setPixelColour(x,y,s); else window.setPixelColour(x,y,c);
+				if(is_shadow(rt_int, triangles) && shadows) window.setPixelColour(x,y,s); else window.setPixelColour(x,y,c);
 			}
 		}
 	}
@@ -397,6 +411,7 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 				vertices[stoi(l2[0])-1], 
 				vertices[stoi(l3[0])-1], 
 				colours[colour]);
+			// triangle.normal = cross(vec3(triangle.vertices[2]-triangle.vertices[0]),vec3(triangle.vertices[1]-triangle.vertices[0]));
 			if(l1[1] != "") {
 				triangle.texturePoints[0] = texture_points[stoi(l1[1])-1];
 				triangle.texturePoints[1] = texture_points[stoi(l2[1])-1];
@@ -475,14 +490,14 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
 		if (event.key.keysym.sym == SDLK_PAGEDOWN) cam.y -= 0.1;
 		else if (event.key.keysym.sym == SDLK_PAGEUP) cam.y += 0.1;
-		else if (event.key.keysym.sym == SDLK_w) cam.z -= 0.1;
+		else if (event.key.keysym.sym == SDLK_w) {cam.z -= 0.1; cout << "[" << cam.x << "," << cam.y << "," << cam.z << "]" << endl;}
 		else if (event.key.keysym.sym == SDLK_a) cam.x -= 0.1;
 		else if (event.key.keysym.sym == SDLK_s) cam.z += 0.1;
 		else if (event.key.keysym.sym == SDLK_d) cam.x += 0.1;
 		else if (event.key.keysym.sym == SDLK_q)     cam = cam * rotation_y(-pi/180);
 		else if (event.key.keysym.sym == SDLK_e)     cam = cam * rotation_y( pi/180);
-		else if (event.key.keysym.sym == SDLK_0)     cam = cam * rotation_x(-pi/180);
-		else if (event.key.keysym.sym == SDLK_9)     cam = cam * rotation_x( pi/180);
+		else if (event.key.keysym.sym == SDLK_EQUALS)     cam = cam * rotation_x(-pi/180);
+		else if (event.key.keysym.sym == SDLK_MINUS)     cam = cam * rotation_x( pi/180);
 		else if (event.key.keysym.sym == SDLK_LEFT)  cam_orientation = cam_orientation * rotation_y(-pi/180);
 		else if (event.key.keysym.sym == SDLK_RIGHT) cam_orientation = cam_orientation * rotation_y( pi/180);
 		else if (event.key.keysym.sym == SDLK_UP)    cam_orientation = cam_orientation * rotation_x(-pi/180);
@@ -498,15 +513,20 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_KP_8) light.z -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_2) light.z += 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_6) light.x += 0.1;
-		else if (event.key.keysym.sym == SDLK_KP_4) light.x -= 0.1;
+		else if (event.key.keysym.sym == SDLK_KP_4) {light.x -= 0.1; cout << "[" << light.x << "," << light.y << "," << light.z << "]" << endl;}
 		else if (event.key.keysym.sym == SDLK_KP_MINUS) light.y -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_PLUS) light.y += 0.1;
+		else if (event.key.keysym.sym == SDLK_LEFTBRACKET)  { proximity = (proximity) ? false : true; cout << "[proximity]: " << proximity << endl; }
+		else if (event.key.keysym.sym == SDLK_RIGHTBRACKET) { angle_of  = (angle_of)  ? false : true; cout << "[angle_of]: " << angle_of << endl; }
+		else if (event.key.keysym.sym == SDLK_HASH)         { shadows   = (shadows)   ? false : true; cout << "[shadows]: " << shadows << endl; }
+		else if (event.key.keysym.sym == SDLK_QUOTE)        { specular  = (specular)  ? false : true; cout << "[specular]: " << specular << endl; }
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) window.savePPM("output.ppm");
 }
 
 int main(int argc, char *argv[]) {
 
 	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	// vector<ModelTriangle> t = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
 
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
