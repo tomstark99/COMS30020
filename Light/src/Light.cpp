@@ -598,7 +598,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
 		if (event.key.keysym.sym == SDLK_PAGEDOWN) cam.y -= 0.1;
 		else if (event.key.keysym.sym == SDLK_PAGEUP) cam.y += 0.1;
-		else if (event.key.keysym.sym == SDLK_w) {cam.z -= 0.1; cout << "[" << cam.x << "," << cam.y << "," << cam.z << "]" << endl;}
+		else if (event.key.keysym.sym == SDLK_w) cam.z -= 0.1; // cout << "[" << cam.x << "," << cam.y << "," << cam.z << "]" << endl;}
 		else if (event.key.keysym.sym == SDLK_a) cam.x -= 0.1;
 		else if (event.key.keysym.sym == SDLK_s) cam.z += 0.1;
 		else if (event.key.keysym.sym == SDLK_d) cam.x += 0.1;
@@ -624,7 +624,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_KP_8) light.z -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_2) light.z += 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_6) light.x += 0.1;
-		else if (event.key.keysym.sym == SDLK_KP_4) {light.x -= 0.1; cout << "[" << light.x << "," << light.y << "," << light.z << "]" << endl;}
+		else if (event.key.keysym.sym == SDLK_KP_4) light.x -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_MINUS) light.y -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_PLUS) light.y += 0.1;
 		else if (event.key.keysym.sym == SDLK_LEFTBRACKET)  { proximity = (proximity) ? false : true; cout << "[proximity]: " << proximity << endl; }

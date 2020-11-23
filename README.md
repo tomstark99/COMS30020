@@ -129,6 +129,10 @@ run with `make` or `make speedy` for better results
 
 `1` `2` `3` to switch between raytracing, rasterising and wireframe rendering respectively
 
+`4` `5` `6` to switch between no shading, gourad shading and phong shading respectively
+
+`p` to toggle light position when in raytracing mode
+
 `NUM_8` `NUM_2` `NUM_4` `NUM_6` to move the light forwards, backwards, left and right respectively
 
 `NUM_+` `NUM_-` to move the light up and down respectively
@@ -161,4 +165,4 @@ _these are not recommended when in the raytracing rendering method, this is best
 
 `o` to start orbiting (in y axis) around origin
 
-`r` to reset the camera view
+`r` to reset the camera view and light position
