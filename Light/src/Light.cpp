@@ -11,6 +11,7 @@
 #include <vector>
 #include <functional>
 #include <glm/glm.hpp>
+// #include <glm/gtx/hash.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <unordered_map>
 
@@ -24,15 +25,15 @@ using namespace glm;
 
 vec3     o(0.0, 0.0, 0.0); // origin
 vec3   cam(0.0, 0.0, 4.0); // cornell cam
-// vec3   cam(0.0, 0.7, 2.0); // sphere cam
-vec3 light(0.0, 1.0, 0.0); // cornell light - 1.0 is proportional to scale used when loading obj
+// vec3   cam(0.0, 1.3, 3.5); // sphere cam
+vec3 light(0.0, 1.0, 2.0); // cornell light - 1.0 is proportional to scale used when loading obj
 // vec3 light(-0.2, 1.4, 2.2); // sphere light - values are proportional to scale used when loading obj
 mat3 cam_orientation(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
 
 float focal = 500.0;
-bool orbiting = false;
-bool proximity = true, angle_of = true, shadows = true, specular = true; // cornell values
-// bool proximity = false, angle_of = true, shadows = false, specular = true; // sphere values
+bool orbiting = false, show_light = false;
+// bool proximity = true, angle_of = true, shadows = true, specular = true; // cornell values
+bool proximity = true, angle_of = true, shadows = true, specular = true; // sphere values
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
@@ -306,7 +307,7 @@ bool is_shadow(RayTriangleIntersection intersect, vector<ModelTriangle> triangle
 		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
 
 		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(t < glm::length(shadow_ray) && t > 0.01 && i != intersect.triangleIndex) {
+			if(t < glm::length(shadow_ray) && t > 0.05 && i != intersect.triangleIndex) {
 				return true;
 			}
 		}
@@ -317,15 +318,59 @@ bool is_shadow(RayTriangleIntersection intersect, vector<ModelTriangle> triangle
 float get_scale(RayTriangleIntersection rt_int, int scale) {
 
 	vec3 normal = normalize(rt_int.intersectedTriangle.normal);
-	vec3 light_ray = rt_int.intersectionPoint - light;
-	vec3 view_ray = normalize(rt_int.intersectionPoint - cam);
-	vec3 reflection_ray = normalize(light_ray - (normal * 2.0f * dot(normalize(light_ray), normal)));
+	vec3 light_ray = light - rt_int.intersectionPoint;
+	vec3 view_ray = normalize(cam - rt_int.intersectionPoint);
+	vec3 reflection_ray = normalize(normalize(light_ray) - (normal * 2.0f * dot(normalize(light_ray), normal)));
 
-	float scale_p = (proximity) ? 1/(pow(length(light_ray),2)) : 0;
+	float scale_p = (proximity) ? 40/(4*pi*(pow(length(light_ray),2))) : 0;
 	float scale_a = dot(normal, normalize(light_ray));
 	float scale_s = pow(dot(reflection_ray, view_ray),scale);
 
-	if(scale_a > 0 && angle_of) scale_p += scale_a;
+	if(scale_a > 0 && angle_of) scale_p *= scale_a;
+	if(scale_s > 0 && specular) scale_p += scale_s;
+	return (scale_p < 1) ? scale_p : 1;
+}
+
+float gourad(RayTriangleIntersection rt_int, int scale) {
+
+	ModelTriangle t = rt_int.intersectedTriangle;
+	vec3 light_ray = normalize(light - rt_int.intersectionPoint);
+	vec3 view_ray = normalize(cam - rt_int.intersectionPoint);
+
+	vector<float> scales;
+	vector<vec3> reflections;
+	for(int i = 0; i < t.normals.size(); i++) {
+		vec3 reflection_ray = normalize(light_ray - (t.normals[i] * 2.0f * dot(light_ray, t.normals[i])));
+		reflections.push_back(reflection_ray);
+
+		// float temp_p = (proximity) ? 40/(4*pi*(pow(length(light_ray),2))) : 0;
+		float temp_a = (angle_of) ? dot(t.normals[i], light_ray) : 0;
+		// if(temp_a > 0 && angle_of) temp_p *= temp_a;
+		scales.push_back(temp_a);
+	}
+	vec3 reflection_ray = (1 - rt_int.u - rt_int.v) * reflections[0] + rt_int.u * reflections[1] + rt_int.v * reflections[2];
+
+	float scale_s = pow(dot(normalize(reflection_ray), view_ray),scale);
+	float brightness = (1-rt_int.u-rt_int.v) * scales[0] + rt_int.u * scales[1] + rt_int.v * scales[2];
+
+	if(scale_s > 0 && specular) brightness += scale_s;
+
+	return (brightness < 1) ? brightness : 1;
+}
+
+float phong(RayTriangleIntersection rt_int, int scale) {
+
+	ModelTriangle t = rt_int.intersectedTriangle;
+	vec3 normal = (1 - rt_int.u - rt_int.v) * t.normals[0] + rt_int.u * t.normals[1] + rt_int.v * t.normals[2];
+	vec3 light_ray = light - rt_int.intersectionPoint;
+	vec3 view_ray = normalize(cam - rt_int.intersectionPoint);
+	vec3 reflection_ray = normalize(normalize(light_ray) - (normal * 2.0f * dot(normalize(light_ray), normal)));
+
+	float scale_a = (angle_of) ? dot(normal, normalize(light_ray)) : 1;
+	float scale_p = (proximity) ? 40*scale_a/(4*pi*(pow(length(light_ray),2))) : 0;
+	float scale_s = pow(dot(reflection_ray, view_ray),scale);
+
+	// if(scale_a > 0 && angle_of) scale_p *= scale_a;
 	if(scale_s > 0 && specular) scale_p += scale_s;
 	return (scale_p < 1) ? scale_p : 1;
 }
@@ -350,8 +395,10 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 			if(rti.distanceFromCamera > t && t > 0) {
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = tri;
-				rti.intersectedTriangle.normal = cross(e1,e0);
+				// rti.intersectedTriangle.normal = cross(e1,e0);
 				rti.triangleIndex = i;
+				rti.u = u;
+				rti.v = v;
 
 				vec3 intersect = tri.vertices[0]+u*e0+v*e1;
 				rti.intersectionPoint = intersect;
@@ -361,31 +408,76 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 	return rti;
 }
 
+function<float(RayTriangleIntersection rt_int, int scale)> brightness = phong;
+
 void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
+
 	for(int x = 0; x < window.width; x++) {
 		for(int y = 0; y < window.height; y++) {
 			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
-			
-			float scale = get_scale(rt_int, 64);
-			scale = (scale > 0.3) ? scale : 0.3;
-			float scale_s = scale/3;
-			scale_s = (scale_s > 0.3) ? scale_s : 0.3;
+
+			float scale = brightness(rt_int, 128);
+			scale = (scale > 0.15) ? scale : 0.15;
 			// if(x%100 == 0 && y%100 == 0) cout << scale << endl << scale_s << endl << endl;
 			if(!isinf(rt_int.distanceFromCamera)){
 				Colour colour = rt_int.intersectedTriangle.colour;
 				uint32_t c = (255 << 24) + (int(colour.red*scale) << 16) + (int(colour.green*scale) << 8) + int(colour.blue*scale);
-				uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
 
-				if(is_shadow(rt_int, triangles) && shadows) window.setPixelColour(x,y,s); else window.setPixelColour(x,y,c);
+				if(is_shadow(rt_int, triangles) && shadows) {
+					float scale_s = scale/3;
+					scale_s = (scale_s > 0.15) ? scale_s : 0.15;
+					uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
+					window.setPixelColour(x,y,s); 
+				} else window.setPixelColour(x,y,c);
 			}
 		}
 	}
+	if(show_light) {
+		vec3 cam_to_vertex = vec3(light.x - cam.x, light.y - cam.y, light.z - cam.z);
+		vec3 adjusted_vector = cam_to_vertex * cam_orientation;
+
+		int u = -(focal * (adjusted_vector.x)/(adjusted_vector.z)) + (window.width / 2);
+		int v = (focal * (adjusted_vector.y)/(adjusted_vector.z)) + (window.height / 2);
+
+		window.setPixelColour(u,   v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+		window.setPixelColour(u+1, v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+		window.setPixelColour(u, v+1, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+		window.setPixelColour(u-1, v, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+		window.setPixelColour(u, v-1, (255 << 24) + (255 << 16) + (0 << 8) + 0);
+	}
+}
+
+vector<ModelTriangle> vertex_normals(vector<ModelTriangle> triangles) {
+
+	for(int i = 0; i < triangles.size(); i++) {
+		ModelTriangle t = triangles[i];
+		vector<vec3> normals;
+		for(int v = 0; v < t.vertices.size(); v++) {
+			vec3 vertex = t.normal;
+			int count = 1;
+			for(int j = 0; j < triangles.size(); j++) {
+				ModelTriangle t_ = triangles[j];
+				for(int u = 0; u < t_.vertices.size(); u++) {
+					if(i != j && t.vertices[v].x == t_.vertices[u].x && t.vertices[v].y == t_.vertices[u].y && t.vertices[v].z == t_.vertices[u].z) {
+						if (acos(dot(t.normal, t_.normal)/(length(t.normal)*length(t_.normal))) < pi/4) {
+							vertex = vertex + t_.normal;
+							count = count + 1;
+						}
+					}
+				}
+			}
+			vertex = vertex / float(count);
+			triangles[i].normals[v] = normalize(vertex);
+		}
+	}
+	return triangles;
 }
 
 vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<string, Colour> colours) {
 
 	vector<ModelTriangle> triangles;
 	vector<vec3> vertices;
+	vector<vec3> normals;
 	vector<TexturePoint> texture_points;
 	string colour;
 	string texture_name;
@@ -397,7 +489,10 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 		if(line == "") continue;
 
 		vector<string> tokens = split(line, ' ');
-		if(tokens[0] == "v") {
+		if(tokens[0] == "vn") {
+			vec3 normal(stof(tokens[1]), stof(tokens[2]), stof(tokens[3]));
+			normals.push_back(normal);
+		} else if(tokens[0] == "v") {
 			vec3 vertex(stof(tokens[1])*scale, stof(tokens[2])*scale, stof(tokens[3])*scale);
 			vertices.push_back(vertex);
 		} else if(tokens[0] == "vt") {
@@ -411,8 +506,14 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 				vertices[stoi(l2[0])-1], 
 				vertices[stoi(l3[0])-1], 
 				colours[colour]);
-			// triangle.normal = cross(vec3(triangle.vertices[2]-triangle.vertices[0]),vec3(triangle.vertices[1]-triangle.vertices[0]));
-			if(l1[1] != "") {
+			if(!normals.empty()) {
+				triangle.normals[0] = normals[stoi(l1[2])-1]; 
+				triangle.normals[1] = normals[stoi(l2[2])-1]; 
+				triangle.normals[2] = normals[stoi(l3[2])-1];
+			}
+			triangle.normal = cross(vec3(triangle.vertices[1]-triangle.vertices[0]),vec3(triangle.vertices[2]-triangle.vertices[0]));
+			
+			if(!texture_points.empty() && l1[1] != "") {
 				triangle.texturePoints[0] = texture_points[stoi(l1[1])-1];
 				triangle.texturePoints[1] = texture_points[stoi(l2[1])-1];
 				triangle.texturePoints[2] = texture_points[stoi(l3[1])-1];
@@ -421,6 +522,12 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 		}  else if(tokens[0] == "usemtl") {
 			colour = tokens[1];
 		}
+	}
+	if(normals.empty()) {
+		cout << "there are no vertex normals in my obj" << endl;
+		triangles = vertex_normals(triangles);
+	} else {
+		cout << "there WERE vertex normals in my obj" << endl;
 	}
 	File.close();
 	return triangles;
@@ -464,6 +571,7 @@ void look_at() {
 
 void reset_camera() {
 	cam = vec3(0.0,0.0,4.0);
+	light = vec3(0.0, 1.0, 2.0);
 	cam_orientation = mat3(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
 }
 
@@ -510,6 +618,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_1) { drawing = draw_raytrace; cout << "[drawing]: raytrace" << endl; }
 		else if (event.key.keysym.sym == SDLK_2) { drawing = draw_rasterise; cout << "[drawing]: rasterise" << endl; }
 		else if (event.key.keysym.sym == SDLK_3) { drawing = draw_wireframe; cout << "[drawing]: wireframe" << endl; }
+		else if (event.key.keysym.sym == SDLK_4) { brightness = get_scale; cout << "[lighting]: scale" << endl; }
+		else if (event.key.keysym.sym == SDLK_5) { brightness = gourad; cout << "[lighting]: gourad" << endl; }
+		else if (event.key.keysym.sym == SDLK_6) { brightness = phong; cout << "[lighting]: phong" << endl; }
 		else if (event.key.keysym.sym == SDLK_KP_8) light.z -= 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_2) light.z += 0.1;
 		else if (event.key.keysym.sym == SDLK_KP_6) light.x += 0.1;
@@ -520,13 +631,15 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_RIGHTBRACKET) { angle_of  = (angle_of)  ? false : true; cout << "[angle_of]: " << angle_of << endl; }
 		else if (event.key.keysym.sym == SDLK_HASH)         { shadows   = (shadows)   ? false : true; cout << "[shadows]: " << shadows << endl; }
 		else if (event.key.keysym.sym == SDLK_QUOTE)        { specular  = (specular)  ? false : true; cout << "[specular]: " << specular << endl; }
+		else if (event.key.keysym.sym == SDLK_p) show_light = (show_light) ? false : true;
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) window.savePPM("output.ppm");
 }
 
 int main(int argc, char *argv[]) {
 
 	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
-	// vector<ModelTriangle> t = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	t.insert(t.end(), t_2.begin(), t_2.end());
 
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
@@ -537,6 +650,7 @@ int main(int argc, char *argv[]) {
 
 		draw(window_grey);
 		drawing(t, window_grey);
+		// drawing(t_2, window_grey);
 
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window_grey.renderFrame();
