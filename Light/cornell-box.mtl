@@ -23,5 +23,5 @@ newmtl Cyan
 Kd 0.000000 1.000000 1.000000
 
 newmtl Cobbles
-Kd 1.000000 1.000000 1.000000
+Kd 0.000000 1.000000 0.000000
 map_Kd texture.ppm

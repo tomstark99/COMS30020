@@ -334,28 +334,30 @@ float get_scale(RayTriangleIntersection rt_int, int scale) {
 float gourad(RayTriangleIntersection rt_int, int scale) {
 
 	ModelTriangle t = rt_int.intersectedTriangle;
-	vec3 light_ray = normalize(light - rt_int.intersectionPoint);
+	vec3 light_ray = light - rt_int.intersectionPoint;
 	vec3 view_ray = normalize(cam - rt_int.intersectionPoint);
 
 	vector<float> scales;
 	vector<vec3> reflections;
 	for(int i = 0; i < t.normals.size(); i++) {
-		vec3 reflection_ray = normalize(light_ray - (t.normals[i] * 2.0f * dot(light_ray, t.normals[i])));
+		vec3 reflection_ray = normalize(normalize(light_ray) - (t.normals[i] * 2.0f * dot(normalize(light_ray), t.normals[i])));
 		reflections.push_back(reflection_ray);
 
-		// float temp_p = (proximity) ? 40/(4*pi*(pow(length(light_ray),2))) : 0;
-		float temp_a = (angle_of) ? dot(t.normals[i], light_ray) : 0;
+		float temp_a = (angle_of) ? dot(t.normals[i], normalize(light_ray)) : 1;
+		// float temp_p = (proximity) ? 40*temp_a/(4*pi*(pow(length(light_ray),2))) : 0;
 		// if(temp_a > 0 && angle_of) temp_p *= temp_a;
 		scales.push_back(temp_a);
 	}
 	vec3 reflection_ray = (1 - rt_int.u - rt_int.v) * reflections[0] + rt_int.u * reflections[1] + rt_int.v * reflections[2];
 
 	float scale_s = pow(dot(normalize(reflection_ray), view_ray),scale);
-	float brightness = (1-rt_int.u-rt_int.v) * scales[0] + rt_int.u * scales[1] + rt_int.v * scales[2];
+	float scale_a = (1-rt_int.u-rt_int.v) * scales[0] + rt_int.u * scales[1] + rt_int.v * scales[2];
 
-	if(scale_s > 0 && specular) brightness += scale_s;
+	float scale_p = (proximity) ? 40*scale_a/(4*pi*(pow(length(light_ray),2))) : 0;
+	// if(scale_a > 0 && angle_of) scale_p *= scale_a;
+	if(scale_s > 0 && specular) scale_p += (scale_s * 0.2);
 
-	return (brightness < 1) ? brightness : 1;
+	return (scale_p < 1) ? scale_p : 1;
 }
 
 float phong(RayTriangleIntersection rt_int, int scale) {
@@ -371,7 +373,7 @@ float phong(RayTriangleIntersection rt_int, int scale) {
 	float scale_s = pow(dot(reflection_ray, view_ray),scale);
 
 	// if(scale_a > 0 && angle_of) scale_p *= scale_a;
-	if(scale_s > 0 && specular) scale_p += scale_s;
+	if(scale_s > 0 && specular) scale_p += (scale_s * 0.2);
 	return (scale_p < 1) ? scale_p : 1;
 }
 
@@ -416,7 +418,7 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 		for(int y = 0; y < window.height; y++) {
 			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
 
-			float scale = brightness(rt_int, 128);
+			float scale = brightness(rt_int, 64);
 			scale = (scale > 0.15) ? scale : 0.15;
 			// if(x%100 == 0 && y%100 == 0) cout << scale << endl << scale_s << endl << endl;
 			if(!isinf(rt_int.distanceFromCamera)){
@@ -424,8 +426,8 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 				uint32_t c = (255 << 24) + (int(colour.red*scale) << 16) + (int(colour.green*scale) << 8) + int(colour.blue*scale);
 
 				if(is_shadow(rt_int, triangles) && shadows) {
-					float scale_s = scale/3;
-					scale_s = (scale_s > 0.15) ? scale_s : 0.15;
+					float scale_s = 0.1;// scale/3;
+					// scale_s = (scale_s > 0.1) ? scale_s : 0.1;
 					uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
 					window.setPixelColour(x,y,s); 
 				} else window.setPixelColour(x,y,c);
@@ -459,7 +461,7 @@ vector<ModelTriangle> vertex_normals(vector<ModelTriangle> triangles) {
 				ModelTriangle t_ = triangles[j];
 				for(int u = 0; u < t_.vertices.size(); u++) {
 					if(i != j && t.vertices[v].x == t_.vertices[u].x && t.vertices[v].y == t_.vertices[u].y && t.vertices[v].z == t_.vertices[u].z) {
-						if (acos(dot(t.normal, t_.normal)/(length(t.normal)*length(t_.normal))) < pi/4) {
+						if (acos(dot(normalize(t.normal), normalize(t_.normal))/(length(t.normal)*length(t_.normal))) < pi/4) {
 							vertex = vertex + t_.normal;
 							count = count + 1;
 						}
