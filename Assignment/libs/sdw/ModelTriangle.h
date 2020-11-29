@@ -13,6 +13,7 @@ struct ModelTriangle {
 	Colour colour{};
 	glm::vec3 normal{};
 	bool mirror = false;
+	bool refract = false;
 
 	ModelTriangle();
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2, Colour trigColour);

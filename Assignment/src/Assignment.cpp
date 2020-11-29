@@ -428,8 +428,6 @@ uint32_t get_texture(RayTriangleIntersection rt_int, TextureMap texture) {
 RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = numeric_limits<float>::infinity();
-	// vec3 ray = int_point - direction;
-	// ray = normalize(cam_orientation * ray);
 
 	for(int i = 0; i < triangles.size(); i++) {
 		ModelTriangle tri = triangles[i];
@@ -486,6 +484,8 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 					RayTriangleIntersection t_rti = get_closest_reflection(intersect, reflection_ray, triangles, i);
 					rti = t_rti;
 					if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
+				} else if(tri.refract) {
+
 				} else {
 					rti.triangleIndex = i;
 					rti.u = u;
@@ -515,9 +515,8 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 			for(int i = 0; i < lights.size(); i++) {
 				scale += (is_shadow(rt_int, lights[i], triangles) && shadows) ? 0.1 : brightness(rt_int, lights[i], 64);
 			}
-			scale /= lights.size();
-			// float scale_s = 0.1;// scale/3;
-			scale = (scale > 0.15) ? scale : 0.15;
+			// scale /= lights.size();
+			scale = (scale/lights.size() > 0.15) ? scale/lights.size() : 0.15;
 			// if(x%100 == 0 && y%100 == 0) cout << scale << endl << scale_s << endl << endl;
 			if(!isinf(rt_int.distanceFromCamera)){
 				Colour colour = rt_int.intersectedTriangle.colour;
@@ -588,6 +587,7 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 	string colour;
 	string texture_name;
 	bool mirror = false;
+	bool refract = false;
 
 	cout << "Texture points: " << texture_points.size() << endl;
 
@@ -626,6 +626,7 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 			}
 			triangle.normal = cross(vec3(triangle.vertices[1]-triangle.vertices[0]),vec3(triangle.vertices[2]-triangle.vertices[0]));
 			triangle.mirror = mirror;
+			triangle.refract = refract;
 			if(!texture_points.empty() && l1[1] != "") {
 				triangle.texturePoints[0] = texture_points[stoi(l1[1])-1];
 				triangle.texturePoints[1] = texture_points[stoi(l2[1])-1];
@@ -635,6 +636,8 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 		}  else if(tokens[0] == "usemtl") {
 			if(tokens[1] == "Mirror") mirror = true;
 			else mirror = false;
+			if(tokens[1] == "Glass") refract = true;
+			else refract = false;
 			colour = tokens[1];
 		}
 	}
@@ -768,7 +771,7 @@ int main(int argc, char *argv[]) {
 
 	// vector<ModelTriangle> t_0 = parse_obj("logo2.obj", 0.002, parse_mtl("logo.mtl"));
 	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
-	// vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	// vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.3, parse_mtl("cornell-box.mtl"));
 	// for(int i = 0; i < t.size(); i++) {
 	// 	cout << t[i] << endl;
 	// }
