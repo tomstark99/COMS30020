@@ -24,10 +24,10 @@ using namespace glm;
 #define pi 3.14159265359
 
 vec3     o(0.0, 0.0, 0.0); // origin
-vec3   cam(140.0,135.0,210.0); // cornell cam
-// vec3   cam(0.0, 0.0, 4); // sphere cam
-// vec3 light(0.0, 1.0, 2.0); // cornell light - 1.0 is proportional to scale used when loading obj
-vec3 light(0.0, 200, 00); // sphere light - values are proportional to scale used when loading obj
+// vec3   cam(140.0,135.0,210.0); // cornell cam
+vec3   cam(0.0, 0.0, 4); // sphere cam
+vec3 light(0.0, 1.0, 2.0); // cornell light - 1.0 is proportional to scale used when loading obj
+// vec3 light(0.0, 200, 00); // sphere light - values are proportional to scale used when loading obj
 mat3 cam_orientation(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
 
 float focal = 500.0;
@@ -381,8 +381,11 @@ float phong(RayTriangleIntersection rt_int, int scale) {
 uint32_t get_texture(RayTriangleIntersection rt_int, TextureMap texture) {
 	ModelTriangle t = rt_int.intersectedTriangle;
 
-	float x = ((1 - rt_int.u - rt_int.v) * t.texturePoints[0].x + rt_int.u * t.texturePoints[1].x + rt_int.v * t.texturePoints[2].x)/3;
-	float y = ((1 - rt_int.u - rt_int.v) * t.texturePoints[0].y + rt_int.u * t.texturePoints[1].y + rt_int.v * t.texturePoints[2].y)/3;
+	float x = ((1 - rt_int.u - rt_int.v) * t.texturePoints[0].x + rt_int.u * t.texturePoints[1].x + rt_int.v * t.texturePoints[2].x);
+	float y = ((1 - rt_int.u - rt_int.v) * t.texturePoints[0].y + rt_int.u * t.texturePoints[1].y + rt_int.v * t.texturePoints[2].y);
+
+	x *= texture.width;
+	y *= texture.height;
 	// cout << x << "," << y << endl;
 	return texture.pixels[round(y)*texture.width + round(x)];
 }
@@ -429,16 +432,28 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 			RayTriangleIntersection rt_int = get_closest_intersection(vec3((int(window.width)/2)-x,y-(int(window.height)/2), focal), triangles);
 
 			float scale = brightness(rt_int, 64);
+			float scale_s = 0.1;// scale/3;
 			scale = (scale > 0.15) ? scale : 0.15;
 			// if(x%100 == 0 && y%100 == 0) cout << scale << endl << scale_s << endl << endl;
 			if(!isinf(rt_int.distanceFromCamera)){
 				Colour colour = rt_int.intersectedTriangle.colour;
-				// uint32_t c = (255 << 24) + (int(colour.red*scale) << 16) + (int(colour.green*scale) << 8) + int(colour.blue*scale);
-				uint32_t c = get_texture(rt_int, texture);
-				if(is_shadow(rt_int, triangles) && shadows) {
-					float scale_s = 0.1;// scale/3;
+				bool in_shadow = is_shadow(rt_int, triangles);
+				bool has_texture = (rt_int.intersectedTriangle.colour.name != "");
+				uint32_t c = (255 << 24) + (int(colour.red*scale) << 16) + (int(colour.green*scale) << 8) + int(colour.blue*scale);
+				uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
+				if(has_texture) {
+					uint32_t t = get_texture(rt_int, texture);
+					float r = (t >> 16) & 0xff;
+					float g = (t >>  8) & 0xff;
+					float b =         t & 0xff;
+
+					c = (255 << 24) + (int(r*scale) << 16) + (int(g*scale) << 8) + int(b*scale);
+					if(in_shadow && shadows) {
+						s = (255 << 24) + (int(r*scale_s) << 16) + (int(g*scale_s) << 8) + int(b*scale_s);
+					}
+				}
+				if(in_shadow && shadows) {
 					// scale_s = (scale_s > 0.1) ? scale_s : 0.1;
-					uint32_t s = (255 << 24) + (int(colour.red*scale_s) << 16) + (int(colour.green*scale_s) << 8) + int(colour.blue*scale_s);
 					window.setPixelColour(x,y,s); 
 				} else window.setPixelColour(x,y,c);
 			}
@@ -612,7 +627,7 @@ void orbit(bool orb) {
 	}
 }
 
-function<void(vector<ModelTriangle>, DrawingWindow &)> drawing = draw_raytrace;
+function<void(vector<ModelTriangle>, DrawingWindow &)> drawing = draw_wireframe;
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
@@ -657,12 +672,14 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 int main(int argc, char *argv[]) {
 
-	vector<ModelTriangle> t = parse_obj("logo2.obj", 0.5, parse_mtl("logo.mtl"));
-	// vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
-	// vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	vector<ModelTriangle> t_0 = parse_obj("logo2.obj", 0.003, parse_mtl("logo.mtl"));
+	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl"));
 	// for(int i = 0; i < t.size(); i++) {
 	// 	cout << t[i] << endl;
 	// }
+	t.insert(t.end(), t_2.begin(), t_2.end());
+	t.insert(t.end(), t_0.begin(), t_0.end());
 	cout << "Triangles: " << t.size() << endl;
 	
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
