@@ -20,7 +20,8 @@ using namespace glm;
 
 #define WIDTH 600
 #define HEIGHT 600
-#define LIGHT 45
+#define LIGHT 30
+#define REFRACTIVE_INDEX 1.3
 
 #define pi 3.14159265359
 
@@ -425,7 +426,45 @@ uint32_t get_texture(RayTriangleIntersection rt_int, TextureMap texture) {
 	return texture.pixels[round(y)*texture.width + round(x)];
 }
 
+
 RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index) {
+	RayTriangleIntersection rti;
+	rti.distanceFromCamera = numeric_limits<float>::infinity();
+
+	for(int i = 0; i < triangles.size(); i++) {
+		ModelTriangle tri = triangles[i];
+		
+		vec3 e0 = tri.vertices[1] - tri.vertices[0];
+		vec3 e1 = tri.vertices[2] - tri.vertices[0];
+		vec3 sp_vector = int_point - tri.vertices[0];
+		mat3 de_matrix(-direction, e0, e1);
+		vec3 possible_s = inverse(de_matrix) * sp_vector;
+		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
+
+		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
+			if(rti.distanceFromCamera > t && t > 0.001f && i != index) {
+				rti.distanceFromCamera = t;
+				rti.intersectedTriangle = tri;
+				// rti.intersectedTriangle.normal = cross(e1,e0);
+				rti.triangleIndex = i;
+				rti.u = u;
+				rti.v = v;
+
+				vec3 intersect = tri.vertices[0]+u*e0+v*e1;
+				rti.intersectionPoint = intersect;
+			}
+		}
+	}
+	if(rti.intersectedTriangle.mirror) {
+		ModelTriangle t = rti.intersectedTriangle;
+		vec3 normal = normalize(t.normal);
+		vec3 reflection_ray = normalize(direction - (normal * 2.0f * dot(direction, normal)));
+		RayTriangleIntersection t_rti = get_closest_reflection(rti.intersectionPoint, reflection_ray, triangles, rti.triangleIndex);
+		rti = t_rti;
+	} 
+	return rti;
+}
+RayTriangleIntersection get_closest_refraction(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = numeric_limits<float>::infinity();
 
@@ -453,6 +492,17 @@ RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, v
 			}
 		}
 	}
+	if(rti.intersectedTriangle.refract) {
+		ModelTriangle t = rti.intersectedTriangle;
+		vec3 normal = normalize(t.normal);
+		float r = REFRACTIVE_INDEX/1;
+		float c = dot(-normal, direction);
+		float sint2 = r * r * (1.0 - c * c);
+		float cost = sqrt(1 - sint2);
+		vec3 refract = normalize(r * direction + (r * c - cost) * normal);
+		RayTriangleIntersection t_rti = get_closest_reflection(rti.intersectionPoint, refract, triangles, rti.triangleIndex);
+		rti = t_rti;
+	} 
 	return rti;
 }
 RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTriangle> triangles) {
@@ -483,9 +533,17 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 					// reflection_ray *= -1;
 					RayTriangleIntersection t_rti = get_closest_reflection(intersect, reflection_ray, triangles, i);
 					rti = t_rti;
-					if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
+					// if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
 				} else if(tri.refract) {
-
+					// vec3 normal = normalize(tri.normal);
+					// float r = 1/REFRACTIVE_INDEX;
+					// float c = dot(-normal, ray);
+					// float sint2 = r * r * (1.0 - c * c);
+					// float cost = sqrt(1 - sint2);
+					// vec3 refract = normalize(r * ray + (r * c - cost) * normal);
+					// RayTriangleIntersection t_rti = get_closest_refraction(intersect, refract, triangles, i);
+					// rti = t_rti;
+					// if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
 				} else {
 					rti.triangleIndex = i;
 					rti.u = u;
@@ -643,11 +701,11 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 	}
 	if(normals.empty()) {
 		cout << "there are no vertex normals in my obj" << endl;
-		triangles = vertex_normals(triangles);
 	} else {
 		cout << "there WERE vertex normals in my obj" << endl;
 	}
 	File.close();
+	triangles = vertex_normals(triangles);
 	cout << "Texture points: " << texture_points.size() << endl;
 
 	return triangles;
@@ -728,12 +786,12 @@ function<void(vector<ModelTriangle>, DrawingWindow &)> drawing = draw_wireframe;
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
-		if (event.key.keysym.sym == SDLK_PAGEDOWN) cam.y -= 1.0;
-		else if (event.key.keysym.sym == SDLK_PAGEUP) cam.y += 1.0;
-		else if (event.key.keysym.sym == SDLK_w) {cam.z -= 1.0; cout << "[" << cam.x << "," << cam.y << "," << cam.z << "]" << endl;}
-		else if (event.key.keysym.sym == SDLK_a) cam.x -= 1.0;
-		else if (event.key.keysym.sym == SDLK_s) cam.z += 1.0;
-		else if (event.key.keysym.sym == SDLK_d) cam.x += 1.0;
+		if (event.key.keysym.sym == SDLK_PAGEDOWN) cam.y -= 0.5;
+		else if (event.key.keysym.sym == SDLK_PAGEUP) cam.y += 0.5;
+		else if (event.key.keysym.sym == SDLK_w) {cam.z -= 0.5; cout << "[" << cam.x << "," << cam.y << "," << cam.z << "]" << endl;}
+		else if (event.key.keysym.sym == SDLK_a) cam.x -= 0.5;
+		else if (event.key.keysym.sym == SDLK_s) cam.z += 0.5;
+		else if (event.key.keysym.sym == SDLK_d) cam.x += 0.5;
 		else if (event.key.keysym.sym == SDLK_q)     cam = cam * rotation_y(-pi/180);
 		else if (event.key.keysym.sym == SDLK_e)     cam = cam * rotation_y( pi/180);
 		else if (event.key.keysym.sym == SDLK_EQUALS)     cam = cam * rotation_x(-pi/180);
@@ -770,8 +828,8 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 
 	// vector<ModelTriangle> t_0 = parse_obj("logo2.obj", 0.002, parse_mtl("logo.mtl"));
-	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
-	// vector<ModelTriangle> t_2 = parse_obj("sphere.obj", 0.3, parse_mtl("cornell-box.mtl"));
+	vector<ModelTriangle> t = parse_obj("cornell-shapes.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	// vector<ModelTriangle> t_2 = parse_obj("bunny.obj", 0.01, parse_mtl("cornell-box.mtl"));
 	// for(int i = 0; i < t.size(); i++) {
 	// 	cout << t[i] << endl;
 	// }
