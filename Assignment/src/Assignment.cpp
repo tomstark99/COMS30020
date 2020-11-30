@@ -20,10 +20,13 @@ using namespace glm;
 
 #define WIDTH 600
 #define HEIGHT 600
-#define LIGHT 30
+#define LIGHT 45
 #define REFRACTIVE_INDEX 1.3
 
 #define pi 3.14159265359
+
+RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index);
+RayTriangleIntersection get_closest_refraction(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index);
 
 vec3     o(0.0, 0.0, 0.0); // origin
 // vec3   cam(140.0,135.0,210.0); // cornell cam
@@ -326,7 +329,7 @@ void draw_rasterise(vector<ModelTriangle> triangles, DrawingWindow &window) {
 	}
 }
 
-bool is_shadow(RayTriangleIntersection intersect, vec3 light, vector<ModelTriangle> triangles) {
+float is_shadow(RayTriangleIntersection intersect, vec3 light, vector<ModelTriangle> triangles, float bright) {
 
 	vec3 shadow_ray = light - intersect.intersectionPoint;
 
@@ -341,12 +344,12 @@ bool is_shadow(RayTriangleIntersection intersect, vec3 light, vector<ModelTriang
 		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
 
 		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(t < glm::length(shadow_ray) && t > 0.05 && i != intersect.triangleIndex) {
-				return true;
+			if(t < glm::length(shadow_ray) && t > 0.05 && i != intersect.triangleIndex && shadows) {
+				return (tri.refract) ? 0.3 : 0.1;
 			}
 		}
 	}
-	return false;
+	return bright;
 }
 
 float get_scale(RayTriangleIntersection rt_int, vec3 light, int scale) {
@@ -426,6 +429,28 @@ uint32_t get_texture(RayTriangleIntersection rt_int, TextureMap texture) {
 	return texture.pixels[round(y)*texture.width + round(x)];
 }
 
+vec3 refract(vec3 incidence, vec3 n, float index) {
+    float d = dot(incidence, n);
+    float refr_1 = index;
+    float refr_2 = 1;
+    if (d < 0) {
+        // outside surface
+        d = -d;
+    } else {
+        // inside surface
+        swap(refr_1, refr_2);
+        n = -n;
+    }
+    float refr = refr_1 / refr_2;
+	float k = 1 - refr * refr * (1 - d * d);
+	if(k < 0) {
+		// cout << "totalinternalreflection" << endl;
+		return normalize(incidence - (n * 2.0f * d));
+	}
+    vec3 refracted_ray = refr * incidence + (refr * d - sqrtf(k)) * n;
+    // vec3 refracted_ray = refr * incidence - (refr * d) * n;
+    return normalize(refracted_ray);
+}
 
 RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index) {
 	RayTriangleIntersection rti;
@@ -442,7 +467,7 @@ RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, v
 		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
 
 		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(rti.distanceFromCamera > t && t > 0.001f && i != index) {
+			if(rti.distanceFromCamera > t && t > 0 && i != index) {
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = tri;
 				// rti.intersectedTriangle.normal = cross(e1,e0);
@@ -456,12 +481,15 @@ RayTriangleIntersection get_closest_reflection(vec3 int_point, vec3 direction, v
 		}
 	}
 	if(rti.intersectedTriangle.mirror) {
-		ModelTriangle t = rti.intersectedTriangle;
-		vec3 normal = normalize(t.normal);
+		vec3 normal = normalize(rti.intersectedTriangle.normal);
 		vec3 reflection_ray = normalize(direction - (normal * 2.0f * dot(direction, normal)));
-		RayTriangleIntersection t_rti = get_closest_reflection(rti.intersectionPoint, reflection_ray, triangles, rti.triangleIndex);
-		rti = t_rti;
+		rti = get_closest_reflection(rti.intersectionPoint, reflection_ray, triangles, rti.triangleIndex);
 	} 
+	else if(rti.intersectedTriangle.refract) {
+		vec3 normal = normalize(rti.intersectedTriangle.normal);
+		vec3 refracted_ray = refract(direction, normal, REFRACTIVE_INDEX);
+		rti = get_closest_refraction(rti.intersectionPoint, refracted_ray, triangles, rti.triangleIndex);
+	}
 	return rti;
 }
 RayTriangleIntersection get_closest_refraction(vec3 int_point, vec3 direction, vector<ModelTriangle> triangles, int index) {
@@ -479,7 +507,7 @@ RayTriangleIntersection get_closest_refraction(vec3 int_point, vec3 direction, v
 		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
 
 		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(rti.distanceFromCamera > t && t > 0.01f && i != index) {
+			if(rti.distanceFromCamera > t && t > 0 && i != index) {
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = tri;
 				// rti.intersectedTriangle.normal = cross(e1,e0);
@@ -493,15 +521,14 @@ RayTriangleIntersection get_closest_refraction(vec3 int_point, vec3 direction, v
 		}
 	}
 	if(rti.intersectedTriangle.refract) {
-		ModelTriangle t = rti.intersectedTriangle;
-		vec3 normal = normalize(t.normal);
-		float r = REFRACTIVE_INDEX/1;
-		float c = dot(-normal, direction);
-		float sint2 = r * r * (1.0 - c * c);
-		float cost = sqrt(1 - sint2);
-		vec3 refract = normalize(r * direction + (r * c - cost) * normal);
-		RayTriangleIntersection t_rti = get_closest_reflection(rti.intersectionPoint, refract, triangles, rti.triangleIndex);
-		rti = t_rti;
+		vec3 normal = normalize(rti.intersectedTriangle.normal);
+		vec3 refracted_ray = refract(direction, normal, REFRACTIVE_INDEX);
+		rti = get_closest_refraction(rti.intersectionPoint, refracted_ray, triangles, rti.triangleIndex);
+	}
+	else if(rti.intersectedTriangle.mirror) {
+		vec3 normal = normalize(rti.intersectedTriangle.normal);
+		vec3 reflection_ray = normalize(direction - (normal * 2.0f * dot(direction, normal)));
+		rti = get_closest_reflection(rti.intersectionPoint, reflection_ray, triangles, rti.triangleIndex);
 	} 
 	return rti;
 }
@@ -528,22 +555,17 @@ RayTriangleIntersection get_closest_intersection(vec3 direction, vector<ModelTri
 				dist = t;
 				if(tri.mirror) {
 					vec3 normal = normalize(tri.normal);
-					// vec3 reverse = ray *= -1;
 					vec3 reflection_ray = normalize(ray - (normal * 2.0f * dot(ray, normal)));
-					// reflection_ray *= -1;
+					
 					RayTriangleIntersection t_rti = get_closest_reflection(intersect, reflection_ray, triangles, i);
 					rti = t_rti;
 					// if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
 				} else if(tri.refract) {
-					// vec3 normal = normalize(tri.normal);
-					// float r = 1/REFRACTIVE_INDEX;
-					// float c = dot(-normal, ray);
-					// float sint2 = r * r * (1.0 - c * c);
-					// float cost = sqrt(1 - sint2);
-					// vec3 refract = normalize(r * ray + (r * c - cost) * normal);
-					// RayTriangleIntersection t_rti = get_closest_refraction(intersect, refract, triangles, i);
-					// rti = t_rti;
-					// if(isinf(t_rti.distanceFromCamera)) rti.inf = true;
+					vec3 normal = normalize(tri.normal);
+					vec3 refracted_ray = refract(ray, normal, REFRACTIVE_INDEX);
+					RayTriangleIntersection t_rti = get_closest_refraction(intersect, refracted_ray, triangles, i);
+					// t_rti.intersectionPoint = intersect;
+					rti = t_rti;
 				} else {
 					rti.triangleIndex = i;
 					rti.u = u;
@@ -571,7 +593,8 @@ void draw_raytrace(vector<ModelTriangle> triangles, DrawingWindow &window) {
 
 			float scale = 0;
 			for(int i = 0; i < lights.size(); i++) {
-				scale += (is_shadow(rt_int, lights[i], triangles) && shadows) ? 0.1 : brightness(rt_int, lights[i], 64);
+				// scale += (is_shadow(rt_int, lights[i], triangles) && shadows) ? 0.1 : brightness(rt_int, lights[i], 64);
+				scale += is_shadow(rt_int, lights[i], triangles, brightness(rt_int, lights[i], 64));
 			}
 			// scale /= lights.size();
 			scale = (scale/lights.size() > 0.15) ? scale/lights.size() : 0.15;
@@ -694,18 +717,21 @@ vector<ModelTriangle> parse_obj(string filename, float scale, unordered_map<stri
 		}  else if(tokens[0] == "usemtl") {
 			if(tokens[1] == "Mirror") mirror = true;
 			else mirror = false;
-			if(tokens[1] == "Glass") refract = true;
+			if(tokens[1] == "Glass") {
+				refract = true;
+				cout << tokens[1] << endl;
+			}
 			else refract = false;
 			colour = tokens[1];
 		}
 	}
 	if(normals.empty()) {
 		cout << "there are no vertex normals in my obj" << endl;
+		triangles = vertex_normals(triangles);
 	} else {
 		cout << "there WERE vertex normals in my obj" << endl;
 	}
 	File.close();
-	triangles = vertex_normals(triangles);
 	cout << "Texture points: " << texture_points.size() << endl;
 
 	return triangles;
@@ -828,7 +854,8 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 
 	// vector<ModelTriangle> t_0 = parse_obj("logo2.obj", 0.002, parse_mtl("logo.mtl"));
-	vector<ModelTriangle> t = parse_obj("cornell-shapes.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	// vector<ModelTriangle> t = parse_obj("cornell-shapes.obj", 0.5, parse_mtl("cornell-box.mtl"));
+	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl"));
 	// vector<ModelTriangle> t_2 = parse_obj("bunny.obj", 0.01, parse_mtl("cornell-box.mtl"));
 	// for(int i = 0; i < t.size(); i++) {
 	// 	cout << t[i] << endl;
