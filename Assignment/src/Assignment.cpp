@@ -333,7 +333,6 @@ void draw_rasterise(vector<ModelTriangle> &triangles, DrawingWindow &window, Tex
 				t.vertices[j].texturePoint.x *= texture.width;
 				t.vertices[j].texturePoint.y *= texture.height;
 			}
-			cout << texture.pixels.size() << endl;
 			texture_triangle(texturex, t, window, depths);
 		} else {
 			fill_triangle(t, triangles[i].colour, window, depths);
@@ -356,7 +355,7 @@ pair<bool,bool> is_shadow(RayTriangleIntersection intersect, vec3 &light, vector
 		float t = possible_s.x, u = possible_s.y, v = possible_s.z;
 
 		if((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if(t < glm::length(shadow_ray) && t > 0.01f && i != intersect.triangleIndex) {
+			if(t < glm::length(shadow_ray) && t > 0.05f && i != intersect.triangleIndex) {
 				bool refract = (triangles[i].refract) ? true : false;
 				return std::make_pair(true,refract);//true;
 			}
@@ -379,6 +378,7 @@ float get_scale(RayTriangleIntersection rt_int, vec3 &light, int scale) {
 
 	if(scale_a > 0 && angle_of) scale_p *= scale_a;
 	if(scale_s > 0 && specular) scale_p += scale_s;
+	scale_p = (scale_p < 0) ? 0 : scale_p;
 	return (scale_p < 1) ? scale_p : 1;
 }
 
@@ -408,7 +408,7 @@ float gourad(RayTriangleIntersection rt_int, vec3 &light, int scale) {
 	// float scale_p = (proximity) ? LIGHT*scale_a/(4*pi*(pow(length(light_ray),2))) : 0;
 	// if(scale_a > 0 && angle_of) scale_p *= scale_a;
 	// if(scale_s > 0 && specular) scale_p += (scale_s * 0.2);
-
+	bright = (bright < 0) ? 0 : bright;
 	return (bright < 1) ? bright : 1;
 }
 
@@ -427,6 +427,7 @@ float phong(RayTriangleIntersection rt_int, vec3 &light, int scale) {
 
 	// if(scale_a > 0 && angle_of) scale_p *= scale_a;
 	if(scale_s > 0 && specular) scale_p += (scale_s);
+	scale_p = (scale_p < 0) ? 0 : scale_p;
 	return (scale_p < 1) ? scale_p : 1;
 }
 
@@ -942,16 +943,16 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
-		if(i < 6) {
-			cam.x -= 0.05;
+		if(i < 12) {
+			cam.x -= 0.075;
 		}
-		else if(i < 18) {
-			cam.x += 0.05;
+		else if(i < 36) {
+			cam.x += 0.075;
 		}
-		else if(i < 24) {
-			cam.x -= 0.05;
+		else if(i < 48) {
+			cam.x -= 0.075;
 		}
 		frames++;
 	}
@@ -960,16 +961,16 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
-		if(i < 6) {
-			cam.x -= 0.1;
+		if(i < 12) {
+			cam.x -= 0.075;
 		}
-		else if(i < 18) {
-			cam.x += 0.1;
+		else if(i < 36) {
+			cam.x += 0.075;
 		}
-		else if(i < 24) {
-			cam.x -= 0.1;
+		else if(i < 48) {
+			cam.x -= 0.075;
 		}
 		frames++;
 	}
@@ -977,7 +978,7 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
 		if(i < 12) {
 			cam.z -= 0.1;
@@ -986,10 +987,10 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 			cam.z += 0.1;
 		}
 		else if(i < 36) {
-			cam.y += 0.2;
+			cam.y += 0.6;
 		}
 		else if(i < 48) {
-			cam.y -= 0.2;
+			cam.y -= 0.6;
 		}
 		look_at();
 		frames++;
@@ -999,31 +1000,31 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
 		if(i < 24) {
-			move_light(0.075,"x");
+			move_light(0.03,"x");
 			move_light(-0.1,"z");
 		}
 		else if(i < 48) {
-			move_light(-0.15,"x");
+			move_light(-0.06,"x");
 		}
 		else if(i < 72) {
-			move_light(0.075,"x");
+			move_light(0.03,"x");
 			move_light(0.1,"z");
-			move_light(-0.075,"y");
+			move_light(-0.05,"y");
 		}
 		else if(i < 96) {
-			move_light(0.075,"y");
+			move_light(0.05,"y");
 		}
 		frames++;
 	}
-	drawing = draw_wireframe;
+	// drawing = draw_wireframe;
 	for(int i = 0; i < 96; i++) { //1
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
 
 		move_light(-0.01,"z");
@@ -1040,9 +1041,9 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
-
+		// drawing = draw_raytrace;
 		move_light(-0.01,"z");
 		float temp_c = 96-i;
 		float temp_c1 = i+1;
@@ -1058,9 +1059,9 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
-
+		// drawing = draw_wireframe;
 		move_light(-0.01,"z");
 		float temp_c = i+1;
 		float temp_c1 = 96-i;
@@ -1076,9 +1077,12 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
 
+		// if(i == 72) {
+		// 	drawing = draw_raytrace;
+		// }
 		move_light(0.01,"z");
 		float temp_c = 96-i;
 		float temp_c1 = i+1;
@@ -1089,14 +1093,16 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		look_at();
 		frames++;
 	}
-	// drawing = draw_rasterise;
+	// drawing = draw_raytrace;
 	for(int i = 0; i < 96; i++) { //5
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
+		window.savePPM("output3/"+name+".ppm");
 		cout << "saved " << frames << endl;
-
+		// if(i==24) {
+		// 	drawing = draw_wireframe;
+		// }
 		move_light(0.01,"z");
 		// cam.z -= 0.05;
 		float temp_c = i+1;
@@ -1114,15 +1120,12 @@ void animate(vector<ModelTriangle> &triangles, DrawingWindow &window, TextureMap
 		draw(window);
 		drawing(triangles, window, textures);
 		string name = string(n_zero - to_string(frames).length(), '0') + to_string(frames);
-		window.savePPM("output/"+name+".ppm");
-		cout << "saved " << frames << endl;
-
+		window.savePPM("output3/"+name+".ppm");
 		cam.y -= 0.00625;
 		float temp_c = 96-i; 
-		// float temp_c = i+1;
+		float temp_c1 = i+1;
 		// temp_c = 0.35*(1/temp_c);
-		cam.z += 0.25*(1/temp_c);;
-		// cout << temp_c << endl;
+		cam.z += 0.3*(1/temp_c1);
 		// cam.x += temp_c;
 		// cam = cam * rotation_y(pi/180);
 		look_at();
@@ -1175,14 +1178,14 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 int main(int argc, char *argv[]) {
 
-	time_t start,finish;
+	// time_t start,finish;
 	unordered_map<string, TextureMap> textures;
 	// vector<ModelTriangle> t_0 = parse_obj("logo2.obj", 0.002, parse_mtl("logo.mtl"));
 	// vector<ModelTriangle> t = parse_obj("low_poly_bunny.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
 	// vector<ModelTriangle> t = parse_obj("sphere.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
-	vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
+	// vector<ModelTriangle> t = parse_obj("cornell-box.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
 	TextureMap texture("logo.ppm");
-	// vector<ModelTriangle> t = parse_obj("cornell-rabbit.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
+	vector<ModelTriangle> t = parse_obj("cornell-shapes-4.obj", 0.5, parse_mtl("cornell-box.mtl", textures));
 	// vector<ModelTriangle> t_2 = parse_obj("bunny.obj", 0.01, parse_mtl("cornell-box.mtl"));
 	// for(int i = 0; i < t.size(); i++) {
 	// 	cout << t[i] << endl;
@@ -1191,15 +1194,14 @@ int main(int argc, char *argv[]) {
 	// t.insert(t.end(), t_0.begin(), t_0.end());
 	cout << "Triangles: " << t.size() << endl;
 
-	
 	DrawingWindow window_grey = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 	animate(t, window_grey, texture);
-	draw(window_grey);
-	time(&start);
-	drawing(t, window_grey, texture);
-	time(&finish);
-	cout << "rendering took: " << difftime(finish,start) << " seconds" << endl;
+	// draw(window_grey);
+	// time(&start);
+	// drawing(t, window_grey, texture);
+	// time(&finish);
+	// cout << "rendering took: " << difftime(finish,start) << " seconds" << endl;
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window_grey.pollForInputEvents(event)) handleEvent(event, window_grey);
