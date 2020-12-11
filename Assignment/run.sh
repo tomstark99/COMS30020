@@ -1,1 +1,0 @@
-zip output.zip output/*
