@@ -1,0 +1,3 @@
+newmtl logoMat
+map_Kd logo.ppm
+Ns 8.000000
