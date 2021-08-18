@@ -205,17 +205,20 @@ Ambient lighting is computationally expensive therefore a threshold minimum valu
 ### Build and run
 
 To build and run this project use the included `Makefile`
+
+```bash
+$ make
 ```
-make
-```
+
 (recommended) or for better results
-```
-make speedy
+
+```bash
+$ make speedy
 ```
 
 For animation uncomment the following line inside `main()`
 
-```
+```c++
 animate(t, window_grey, texture);
 ```
 
